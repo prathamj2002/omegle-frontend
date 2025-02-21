@@ -5,6 +5,7 @@ import "../styles.css";
 const socket = io("https://omegle-backend-sq4d.onrender.com", { transports: ["websocket"], secure: true });
 
 
+
 const NextButton = () => {
     const handleNext = () => {
         socket.emit("next"); // Notify server to find a new match
