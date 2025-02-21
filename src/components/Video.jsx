@@ -10,9 +10,6 @@ const Video = () => {
     const peerConnection = useRef(null);
     const [partnerId, setPartnerId] = useState(null);
 
-    // Attach peerConnection to window for debugging
-    window.peerConnection = peerConnection;
-
     useEffect(() => {
         console.log("🔗 Connecting to WebSocket...");
 
@@ -28,41 +25,9 @@ const Video = () => {
             await startCall(partner);
         });
 
-        socket.on("offer", async ({ sdp, sender }) => {
-            console.log(`📩 Offer received from ${sender}`);
-            peerConnection.current = await createPeerConnection(sender);
-            if (!peerConnection.current) return;
-            await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
-            const answer = await peerConnection.current.createAnswer();
-            await peerConnection.current.setLocalDescription(answer);
-            socket.emit("answer", { sdp: answer, target: sender });
-        });
-
-        socket.on("answer", async ({ sdp }) => {
-            console.log(`📩 Answer received`);
-            if (peerConnection.current) {
-                await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
-            }
-        });
-
-        socket.on("ice-candidate", ({ candidate }) => {
-            console.log(`📩 ICE Candidate received`);
-            if (peerConnection.current) {
-                peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
-            }
-        });
-
-        socket.on("disconnect", () => {
-            console.log("❌ WebSocket Disconnected");
-        });
-
         return () => {
             socket.off("connect");
             socket.off("match_found");
-            socket.off("offer");
-            socket.off("answer");
-            socket.off("ice-candidate");
-            socket.off("disconnect");
         };
     }, []);
 
@@ -70,10 +35,7 @@ const Video = () => {
         console.log(`📞 Starting call with ${partner}`);
         peerConnection.current = await createPeerConnection(partner);
 
-        if (!peerConnection.current) {
-            console.error("❌ Failed to create PeerConnection!");
-            return;
-        }
+        if (!peerConnection.current) return;
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -90,55 +52,33 @@ const Video = () => {
     };
 
     const createPeerConnection = async (partner) => {
-        console.log(`🔗 Fetching Xirsys ICE Servers for ${partner}`);
+        console.log(`🔗 Fetching ICE Servers from backend`);
 
         let iceServers = [];
 
         try {
-            const response = await fetch("https://global.xirsys.net/_turn/MyFirstApp", {
-                method: "PUT",
-                headers: {
-                    "Authorization": "Basic " + btoa("prathamlakhani:07a7695a-f0a6-11ef-8d7c-0242ac150003"),
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ format: "urls" }) // Force Xirsys to return only URLs
-            });
-
-            const iceData = await response.json();
-
-            if (iceData && iceData.v && Array.isArray(iceData.v.iceServers)) {
-                iceServers = iceData.v.iceServers;
+            const response = await fetch("https://omegle-backend-sq4d.onrender.com/getIceServers");
+            const data = await response.json();
+            if (Array.isArray(data)) {
+                iceServers = data;
             } else {
-                console.error("⚠️ Xirsys API returned an invalid format:", iceData);
+                console.error("⚠️ Invalid ICE Server response:", data);
                 return null;
             }
 
-            if (iceServers.length === 0) {
-                console.error("⚠️ Xirsys did not return any ICE servers. Check API credentials or Xirsys status.");
-                return null;
-            }
-
-            console.log("✅ Xirsys ICE Servers:", iceServers);
-
+            console.log("✅ ICE Servers:", iceServers);
         } catch (error) {
-            console.error("🚨 Xirsys API Request Failed:", error);
+            console.error("🚨 Failed to fetch ICE Servers:", error);
             return null;
         }
 
-        const pc = new RTCPeerConnection({
-            iceServers: iceServers,
-            iceTransportPolicy: "relay" // Forces TURN usage
-        });
+        const pc = new RTCPeerConnection({ iceServers, iceTransportPolicy: "relay" });
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
                 console.log("📤 Sending ICE Candidate:", event.candidate);
                 socket.emit("ice-candidate", { candidate: event.candidate, target: partner });
             }
-        };
-
-        pc.oniceconnectionstatechange = () => {
-            console.log(`🔄 ICE Connection State: ${pc.iceConnectionState}`);
         };
 
         pc.ontrack = (event) => {
