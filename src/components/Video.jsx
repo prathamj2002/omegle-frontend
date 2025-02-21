@@ -42,9 +42,24 @@ const Video = () => {
         console.log(`📞 Starting call with ${partner}`);
         peerConnection.current = createPeerConnection(partner);
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    
         localVideoRef.current.srcObject = stream;
         stream.getTracks().forEach(track => peerConnection.current.addTrack(track, stream));
+    
+        console.log("📤 Sending offer...");
+        const offer = await peerConnection.current.createOffer();
+        await peerConnection.current.setLocalDescription(offer);
+        socket.emit("offer", { sdp: offer, target: partner });
+    
+        // Log WebRTC Status
+        peerConnection.current.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log("📤 Sending ICE Candidate");
+                socket.emit("ice-candidate", { candidate: event.candidate, target: partner });
+            }
+        };
     };
+    
 
     const createPeerConnection = (partner) => {
         console.log(`🔗 Creating PeerConnection with ${partner}`);
