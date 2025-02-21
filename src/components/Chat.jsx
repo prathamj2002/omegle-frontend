@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import io from "socket.io-client";
 import "../styles.css";
 
-const socket = io("http://localhost:5001"); // Connect to backend server
+const socket = io("https://omegle-backend-sq4d.onrender.com", { transports: ["websocket"], secure: true });
+
 
 const Chat = () => {
     const [messages, setMessages] = useState([]);
