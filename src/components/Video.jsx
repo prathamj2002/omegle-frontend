@@ -15,7 +15,7 @@ const Video = () => {
 
     useEffect(() => {
         console.log("🔗 Connecting to WebSocket...");
-        
+
         socket.on("connect", () => {
             console.log("✅ WebSocket Connected:", socket.id);
         });
@@ -64,32 +64,55 @@ const Video = () => {
     const startCall = async (partner) => {
         console.log(`📞 Starting call with ${partner}`);
         peerConnection.current = await createPeerConnection(partner);
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        localVideoRef.current.srcObject = stream;
-        stream.getTracks().forEach(track => peerConnection.current.addTrack(track, stream));
 
-        console.log("📤 Sending offer...");
-        const offer = await peerConnection.current.createOffer();
-        await peerConnection.current.setLocalDescription(offer);
-        socket.emit("offer", { sdp: offer, target: partner });
+        if (!peerConnection.current) {
+            console.error("❌ Failed to create PeerConnection!");
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localVideoRef.current.srcObject = stream;
+            stream.getTracks().forEach(track => peerConnection.current.addTrack(track, stream));
+
+            console.log("📤 Sending offer...");
+            const offer = await peerConnection.current.createOffer();
+            await peerConnection.current.setLocalDescription(offer);
+            socket.emit("offer", { sdp: offer, target: partner });
+        } catch (error) {
+            console.error("🚨 Error accessing media devices:", error);
+        }
     };
 
     const createPeerConnection = async (partner) => {
         console.log(`🔗 Fetching Xirsys ICE Servers for ${partner}`);
 
-        // Fetch Xirsys TURN credentials dynamically
-        const response = await fetch("https://global.xirsys.net/_turn/OmegleClone", {
-            method: "PUT",
-            headers: {
-                "Authorization": "Basic " + btoa("prathamlakhani:07a7695a-f0a6-11ef-8d7c-0242ac150003"),
-                "Content-Type": "application/json"
+        let iceServers = [];
+
+        try {
+            const response = await fetch("https://global.xirsys.net/_turn/MyFirstApp", {
+                method: "PUT",
+                headers: {
+                    "Authorization": "Basic " + btoa("prathamlakhani:07a7695a-f0a6-11ef-8d7c-0242ac150003"),
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ format: "urls" }) // Force Xirsys to return only URLs
+            });
+
+            const iceData = await response.json();
+            iceServers = iceData?.v?.iceServers || [];
+
+            if (iceServers.length === 0) {
+                console.error("⚠️ Xirsys did not return any ICE servers. Check API credentials or Xirsys status.");
+                return null;
             }
-        });
 
-        const iceData = await response.json();
-        const iceServers = iceData.v?.iceServers || [];
+            console.log("✅ Xirsys ICE Servers:", iceServers);
 
-        console.log("✅ Xirsys ICE Servers:", iceServers);
+        } catch (error) {
+            console.error("🚨 Xirsys API Request Failed:", error);
+            return null;
+        }
 
         const pc = new RTCPeerConnection({
             iceServers: iceServers,
@@ -101,6 +124,10 @@ const Video = () => {
                 console.log("📤 Sending ICE Candidate:", event.candidate);
                 socket.emit("ice-candidate", { candidate: event.candidate, target: partner });
             }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            console.log(`🔄 ICE Connection State: ${pc.iceConnectionState}`);
         };
 
         pc.ontrack = (event) => {
