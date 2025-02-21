@@ -2,7 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 import "../styles.css";
 
-const socket = io("https://omegle-backend-sq4d.onrender.com", { transports: ["websocket"], secure: true });
+let socket;
+if (!window.socket) {
+    window.socket = io("https://omegle-backend-sq4d.onrender.com", { transports: ["websocket"], secure: true });
+}
+socket = window.socket;
+
 
 const Video = () => {
     const localVideoRef = useRef(null);
