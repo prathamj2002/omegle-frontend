@@ -4,6 +4,8 @@ import "../styles.css";
 
 const socket = io("https://omegle-backend-sq4d.onrender.com", { transports: ["websocket"], secure: true });
 
+window.socket = socket;
+
 const Video = () => {
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
