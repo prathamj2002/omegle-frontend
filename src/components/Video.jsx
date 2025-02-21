@@ -30,7 +30,7 @@ const Video = () => {
 
         socket.on("offer", async ({ sdp, sender }) => {
             console.log(`📩 Offer received from ${sender}`);
-            peerConnection.current = createPeerConnection(sender);
+            peerConnection.current = await createPeerConnection(sender);
             await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
             const answer = await peerConnection.current.createAnswer();
             await peerConnection.current.setLocalDescription(answer);
@@ -63,7 +63,7 @@ const Video = () => {
 
     const startCall = async (partner) => {
         console.log(`📞 Starting call with ${partner}`);
-        peerConnection.current = createPeerConnection(partner);
+        peerConnection.current = await createPeerConnection(partner);
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localVideoRef.current.srcObject = stream;
         stream.getTracks().forEach(track => peerConnection.current.addTrack(track, stream));
@@ -74,46 +74,42 @@ const Video = () => {
         socket.emit("offer", { sdp: offer, target: partner });
     };
 
-    const createPeerConnection = (partner) => {
-        console.log(`🔗 Creating PeerConnection with ${partner}`);
-    
+    const createPeerConnection = async (partner) => {
+        console.log(`🔗 Fetching Xirsys ICE Servers for ${partner}`);
+
+        // Fetch Xirsys TURN credentials dynamically
+        const response = await fetch("https://global.xirsys.net/_turn/OmegleClone", {
+            method: "PUT",
+            headers: {
+                "Authorization": "Basic " + btoa("prathamlakhani:07a7695a-f0a6-11ef-8d7c-0242ac150003"),
+                "Content-Type": "application/json"
+            }
+        });
+
+        const iceData = await response.json();
+        const iceServers = iceData.v?.iceServers || [];
+
+        console.log("✅ Xirsys ICE Servers:", iceServers);
+
         const pc = new RTCPeerConnection({
-            iceServers: [
-                {
-                    urls: "turn:relay1.expressturn.com:3478",
-                    username: "efrost",
-                    credential: "turnpassword"
-                },
-                {
-                    urls: "turn:global.turn.twilio.com:3478",
-                    username: "your_twilio_username",
-                    credential: "your_twilio_credential"
-                },
-                {
-                    urls: "turn:turn.anyfirewall.com:443?transport=tcp",
-                    username: "webrtc",
-                    credential: "webrtc"
-                }
-            ],
+            iceServers: iceServers,
             iceTransportPolicy: "relay" // Forces TURN usage
         });
-    
+
         pc.onicecandidate = (event) => {
             if (event.candidate) {
                 console.log("📤 Sending ICE Candidate:", event.candidate);
                 socket.emit("ice-candidate", { candidate: event.candidate, target: partner });
             }
         };
-    
+
         pc.ontrack = (event) => {
             console.log("📡 Received track");
             remoteVideoRef.current.srcObject = event.streams[0];
         };
-    
+
         return pc;
     };
-    
-    
 
     return (
         <div className="video-container">
