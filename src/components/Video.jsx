@@ -76,32 +76,41 @@ const Video = () => {
 
     const createPeerConnection = (partner) => {
         console.log(`🔗 Creating PeerConnection with ${partner}`);
+    
         const pc = new RTCPeerConnection({
             iceServers: [
-                { urls: "stun:stun.l.google.com:19302" },
-                { urls: "stun:stun1.l.google.com:19302" },
                 {
-                    urls: "turn:relay1.expressturn.com:3478",
-                    username: "efrost",
-                    credential: "turnpassword"
+                    urls: "stun:stun.l.google.com:19302"
+                },
+                {
+                    urls: "turn:openrelay.metered.ca:80",
+                    username: "open",
+                    credential: "open"
+                },
+                {
+                    urls: "turn:global.turn.twilio.com:3478",
+                    username: "your_twilio_username",
+                    credential: "your_twilio_credential"
                 }
-            ]
+            ],
+            iceTransportPolicy: "relay" // Forces TURN usage
         });
-
+    
         pc.onicecandidate = (event) => {
             if (event.candidate) {
-                console.log("📤 Sending ICE Candidate");
+                console.log("📤 Sending ICE Candidate:", event.candidate);
                 socket.emit("ice-candidate", { candidate: event.candidate, target: partner });
             }
         };
-
+    
         pc.ontrack = (event) => {
             console.log("📡 Received track");
             remoteVideoRef.current.srcObject = event.streams[0];
         };
-
+    
         return pc;
     };
+    
 
     return (
         <div className="video-container">
