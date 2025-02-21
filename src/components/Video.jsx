@@ -31,6 +31,7 @@ const Video = () => {
         socket.on("offer", async ({ sdp, sender }) => {
             console.log(`📩 Offer received from ${sender}`);
             peerConnection.current = await createPeerConnection(sender);
+            if (!peerConnection.current) return;
             await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
             const answer = await peerConnection.current.createAnswer();
             await peerConnection.current.setLocalDescription(answer);
@@ -39,12 +40,16 @@ const Video = () => {
 
         socket.on("answer", async ({ sdp }) => {
             console.log(`📩 Answer received`);
-            await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
+            if (peerConnection.current) {
+                await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
+            }
         });
 
         socket.on("ice-candidate", ({ candidate }) => {
             console.log(`📩 ICE Candidate received`);
-            peerConnection.current?.addIceCandidate(new RTCIceCandidate(candidate));
+            if (peerConnection.current) {
+                peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+            }
         });
 
         socket.on("disconnect", () => {
@@ -100,7 +105,13 @@ const Video = () => {
             });
 
             const iceData = await response.json();
-            iceServers = iceData?.v?.iceServers || [];
+
+            if (iceData && iceData.v && Array.isArray(iceData.v.iceServers)) {
+                iceServers = iceData.v.iceServers;
+            } else {
+                console.error("⚠️ Xirsys API returned an invalid format:", iceData);
+                return null;
+            }
 
             if (iceServers.length === 0) {
                 console.error("⚠️ Xirsys did not return any ICE servers. Check API credentials or Xirsys status.");
