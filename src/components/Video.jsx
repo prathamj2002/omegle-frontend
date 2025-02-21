@@ -80,17 +80,19 @@ const Video = () => {
         const pc = new RTCPeerConnection({
             iceServers: [
                 {
-                    urls: "stun:stun.l.google.com:19302"
-                },
-                {
-                    urls: "turn:openrelay.metered.ca:80",
-                    username: "open",
-                    credential: "open"
+                    urls: "turn:relay1.expressturn.com:3478",
+                    username: "efrost",
+                    credential: "turnpassword"
                 },
                 {
                     urls: "turn:global.turn.twilio.com:3478",
                     username: "your_twilio_username",
                     credential: "your_twilio_credential"
+                },
+                {
+                    urls: "turn:turn.anyfirewall.com:443?transport=tcp",
+                    username: "webrtc",
+                    credential: "webrtc"
                 }
             ],
             iceTransportPolicy: "relay" // Forces TURN usage
@@ -110,6 +112,7 @@ const Video = () => {
     
         return pc;
     };
+    
     
 
     return (
