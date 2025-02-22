@@ -1,10 +1,6 @@
 import React from "react";
-import io from "socket.io-client";
+import socket from "../socket"; // ✅ Use the shared socket
 import "../styles.css";
-
-const socket = io("https://omegle-backend-sq4d.onrender.com", { transports: ["websocket"], secure: true });
-
-
 
 const NextButton = () => {
     const handleNext = () => {

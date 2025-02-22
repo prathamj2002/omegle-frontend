@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from "react";
-import io from "socket.io-client";
+import socket from "../socket"; // ✅ Use the shared socket
 import "../styles.css";
-
-const socket = io("https://omegle-backend-sq4d.onrender.com", { transports: ["websocket"], secure: true });
-
 
 const Chat = () => {
     const [messages, setMessages] = useState([]);
@@ -13,6 +10,10 @@ const Chat = () => {
         socket.on("message", (message) => {
             setMessages((prevMessages) => [...prevMessages, message]);
         });
+
+        return () => {
+            socket.off("message"); // ✅ Clean up the event listener
+        };
     }, []);
 
     const sendMessage = () => {

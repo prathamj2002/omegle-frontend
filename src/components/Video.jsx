@@ -1,13 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import io from "socket.io-client";
+import socket from "../socket"; // ✅ Use the shared socket
 import "../styles.css";
-
-// ✅ Ensure WebSocket is created only once
-let socket;
-if (!window.socket) {
-    window.socket = io("https://omegle-backend-sq4d.onrender.com", { transports: ["websocket"], secure: true });
-}
-socket = window.socket;
 
 const Video = () => {
     const localVideoRef = useRef(null);
@@ -17,7 +10,7 @@ const Video = () => {
 
     useEffect(() => {
         console.log("🔗 Connecting to WebSocket...");
-
+        
         socket.on("connect", () => {
             console.log("✅ WebSocket Connected:", socket.id);
         });
@@ -32,8 +25,7 @@ const Video = () => {
 
         socket.on("offer", async ({ sdp, sender }) => {
             console.log(`📩 Offer received from ${sender}`);
-            peerConnection.current = await createPeerConnection(sender);
-            if (!peerConnection.current) return;
+            peerConnection.current = createPeerConnection(sender);
             await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
             const answer = await peerConnection.current.createAnswer();
             await peerConnection.current.setLocalDescription(answer);
@@ -42,79 +34,47 @@ const Video = () => {
 
         socket.on("answer", async ({ sdp }) => {
             console.log(`📩 Answer received`);
-            if (peerConnection.current) {
-                await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
-            }
+            await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
         });
 
         socket.on("ice-candidate", ({ candidate }) => {
             console.log(`📩 ICE Candidate received`);
-            if (peerConnection.current) {
-                peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
-            }
-        });
-
-        socket.on("disconnect", () => {
-            console.log("❌ WebSocket Disconnected");
+            peerConnection.current?.addIceCandidate(new RTCIceCandidate(candidate));
         });
 
         return () => {
-            console.log("❌ Cleaning up WebSocket...");
-            if (socket) {
-                socket.disconnect();
-            }
+            socket.off("connect");
+            socket.off("match_found");
+            socket.off("offer");
+            socket.off("answer");
+            socket.off("ice-candidate");
         };
     }, []);
 
     const startCall = async (partner) => {
         console.log(`📞 Starting call with ${partner}`);
-        peerConnection.current = await createPeerConnection(partner);
+        peerConnection.current = createPeerConnection(partner);
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localVideoRef.current.srcObject = stream;
+        stream.getTracks().forEach(track => peerConnection.current.addTrack(track, stream));
 
-        if (!peerConnection.current) {
-            console.error("❌ Failed to create PeerConnection!");
-            return;
-        }
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            localVideoRef.current.srcObject = stream;
-            stream.getTracks().forEach(track => peerConnection.current.addTrack(track, stream));
-
-            console.log("📤 Sending offer...");
-            const offer = await peerConnection.current.createOffer();
-            await peerConnection.current.setLocalDescription(offer);
-            socket.emit("offer", { sdp: offer, target: partner });
-        } catch (error) {
-            console.error("🚨 Error accessing media devices:", error);
-        }
+        console.log("📤 Sending offer...");
+        const offer = await peerConnection.current.createOffer();
+        await peerConnection.current.setLocalDescription(offer);
+        socket.emit("offer", { sdp: offer, target: partner });
     };
 
-    const fetchIceServers = async () => {
-        console.log("🔗 Fetching ICE Servers from backend");
-
-        try {
-            const response = await fetch("https://omegle-backend-sq4d.onrender.com/getIceServers");
-            const iceServers = await response.json();
-
-            if (Array.isArray(iceServers)) {
-                console.log("✅ ICE Servers:", iceServers);
-                return iceServers;
-            } else {
-                console.error("⚠️ Invalid ICE Server response:", iceServers);
-                return [];
-            }
-        } catch (error) {
-            console.error("🚨 Failed to fetch ICE Servers:", error);
-            return [];
-        }
-    };
-
-    const createPeerConnection = async (partner) => {
-        console.log(`🔗 Fetching ICE Servers for ${partner}`);
-        const iceServers = await fetchIceServers();
+    const createPeerConnection = (partner) => {
+        console.log(`🔗 Creating PeerConnection with ${partner}`);
 
         const pc = new RTCPeerConnection({
-            iceServers: iceServers,
+            iceServers: [
+                {
+                    urls: "turn:global.turn.twilio.com:3478",
+                    username: "your_twilio_username",
+                    credential: "your_twilio_credential"
+                }
+            ],
             iceTransportPolicy: "relay" // Forces TURN usage
         });
 
@@ -122,16 +82,6 @@ const Video = () => {
             if (event.candidate) {
                 console.log("📤 Sending ICE Candidate:", event.candidate);
                 socket.emit("ice-candidate", { candidate: event.candidate, target: partner });
-            }
-        };
-
-        pc.oniceconnectionstatechange = () => {
-            console.log(`🔄 ICE Connection State: ${pc.iceConnectionState}`);
-            if (pc.iceConnectionState === "failed") {
-                console.error("🚨 ICE Connection Failed! The connection could not be established.");
-            }
-            if (pc.iceConnectionState === "connected") {
-                console.log("✅ ICE Connection Successful!");
             }
         };
 
