@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import socket from "../socket"; // ✅ Use the shared socket
+import socket from "../components/socket"; 
+
 import "../styles.css";
 
 const Chat = () => {
