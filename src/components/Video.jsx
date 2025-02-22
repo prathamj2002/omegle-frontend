@@ -8,6 +8,7 @@ const Video = () => {
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
     const peerConnection = useRef(null);
+    window.peerConnection = peerConnection;
     const [partnerId, setPartnerId] = useState(null);
 
     useEffect(() => {
