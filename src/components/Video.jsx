@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import socket from "../socket"; // ✅ Use shared WebSocket
+import socket from "../components/socket"; 
+
 import "../styles.css";
+
 
 const Video = () => {
     const localVideoRef = useRef(null);
