@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import socket from "../components/socket"; 
-
+import socket from "../socket"; // ✅ Use shared WebSocket
 import "../styles.css";
 
 const Video = () => {
@@ -11,7 +10,7 @@ const Video = () => {
 
     useEffect(() => {
         console.log("🔗 Connecting to WebSocket...");
-        
+
         socket.on("connect", () => {
             console.log("✅ WebSocket Connected:", socket.id);
         });
@@ -26,21 +25,40 @@ const Video = () => {
 
         socket.on("offer", async ({ sdp, sender }) => {
             console.log(`📩 Offer received from ${sender}`);
-            peerConnection.current = createPeerConnection(sender);
-            await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
-            const answer = await peerConnection.current.createAnswer();
-            await peerConnection.current.setLocalDescription(answer);
-            socket.emit("answer", { sdp: answer, target: sender });
+
+            if (!peerConnection.current) {
+                peerConnection.current = createPeerConnection(sender);
+            }
+
+            try {
+                await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
+                const answer = await peerConnection.current.createAnswer();
+                await peerConnection.current.setLocalDescription(answer);
+                socket.emit("answer", { sdp: answer, target: sender });
+            } catch (error) {
+                console.error("🚨 Error setting remote description (Offer):", error);
+            }
         });
 
         socket.on("answer", async ({ sdp }) => {
             console.log(`📩 Answer received`);
-            await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
+
+            if (peerConnection.current && peerConnection.current.signalingState === "have-local-offer") {
+                try {
+                    await peerConnection.current.setRemoteDescription(new RTCSessionDescription(sdp));
+                } catch (error) {
+                    console.error("🚨 Error setting remote description (Answer):", error);
+                }
+            }
         });
 
         socket.on("ice-candidate", ({ candidate }) => {
             console.log(`📩 ICE Candidate received`);
-            peerConnection.current?.addIceCandidate(new RTCIceCandidate(candidate));
+            if (peerConnection.current) {
+                peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate)).catch((error) => {
+                    console.error("🚨 Error adding ICE candidate:", error);
+                });
+            }
         });
 
         return () => {
@@ -71,9 +89,12 @@ const Video = () => {
         const pc = new RTCPeerConnection({
             iceServers: [
                 {
-                    urls: "turn:global.turn.twilio.com:3478",
-                    username: "your_twilio_username",
-                    credential: "your_twilio_credential"
+                    urls: "stun:stun.l.google.com:19302"
+                },
+                {
+                    urls: "turn:relay.backups.cz",
+                    username: "webrtc",
+                    credential: "webrtc"
                 }
             ],
             iceTransportPolicy: "relay" // Forces TURN usage
@@ -84,6 +105,10 @@ const Video = () => {
                 console.log("📤 Sending ICE Candidate:", event.candidate);
                 socket.emit("ice-candidate", { candidate: event.candidate, target: partner });
             }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            console.log(`🔄 ICE Connection State: ${pc.iceConnectionState}`);
         };
 
         pc.ontrack = (event) => {
